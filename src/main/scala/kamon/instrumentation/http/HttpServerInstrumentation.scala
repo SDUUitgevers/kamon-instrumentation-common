@@ -293,6 +293,11 @@ object HttpServerInstrumentation {
       }
     }
 
+    private def clientIp(request: HttpMessage.Request) : String =
+      request.read("X-Forwarded-For").flatMap(_.split(", ").headOption).orElse(
+        request.read("Remote-Address").orElse(
+          request.read("X-Real-Ip"))).getOrElse("Unknown").takeWhile(_ != ':')
+
 
     private def buildServerSpan(context: Context, request: HttpMessage.Request, deferSamplingDecision: Boolean): Span = {
       val span = Kamon.serverSpanBuilder(operationName(request), component)
@@ -312,6 +317,7 @@ object HttpServerInstrumentation {
 
       SpanTagger.tag(span, TagKeys.HttpUrl, request.url, settings.urlTagMode)
       SpanTagger.tag(span, TagKeys.HttpMethod, request.method, settings.methodTagMode)
+      SpanTagger.tag(span, TagKeys.ClientIp, clientIp(request), settings.clientIpTagMode)
       settings.contextTags.foreach {
         case (tagName, mode) =>
           context
@@ -346,6 +352,7 @@ object HttpServerInstrumentation {
     urlTagMode: TagMode,
     methodTagMode: TagMode,
     statusCodeTagMode: TagMode,
+    clientIpTagMode: TagMode,
     contextTags: Map[String, TagMode],
     traceIDResponseHeader: Option[String],
     spanIDResponseHeader: Option[String],
@@ -374,6 +381,7 @@ object HttpServerInstrumentation {
       val urlTagMode = TagMode.from(config.getString("tracing.tags.url"))
       val methodTagMode = TagMode.from(config.getString("tracing.tags.method"))
       val statusCodeTagMode = TagMode.from(config.getString("tracing.tags.status-code"))
+      val clientIpTagMode = TagMode.from(config.getString("tracing.tags.client-ip"))
       val contextTags = config.getConfig("tracing.tags.from-context").pairs.map {
         case (tagName, mode) => (tagName, TagMode.from(mode))
       }
@@ -408,6 +416,7 @@ object HttpServerInstrumentation {
         urlTagMode,
         methodTagMode,
         statusCodeTagMode,
+        clientIpTagMode,
         contextTags,
         traceIDResponseHeader,
         spanIDResponseHeader,
